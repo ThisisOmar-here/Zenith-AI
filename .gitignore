@@ -1,0 +1,25 @@
+maincode.py
+
+node_modules/
+venv/
+__pycache__/
+
+.env
+.env.local
+
+# IDE files
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+
+# Build outputs
+dist/
+build/
+*.pyc
+
+# Logs
+*.log
+logs/
