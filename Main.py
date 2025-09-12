@@ -25,7 +25,6 @@ from langchain_core.messages import ToolMessage
 # If using Groq with LangChain, you need a Groq wrapper (pseudo-example)
 from langchain_groq import ChatGroq
 
-useTTS = False
 
 logging.basicConfig(
     level=logging.INFO,
@@ -583,25 +582,3 @@ def AnswerQes(query: str):
         pass
 
     return final_answer_content
-
-
-# --- GUI Demo Function (self‑contained imports) --
-    # Only run the interactive / GUI demo when executing this file directly.
-    try:
-        if client.collection_exists(collection_name):
-            print(f"Collection {collection_name} already exists. Skipping creation.")
-            demo_res()
-        else:
-            print(f"Collection {collection_name} does not exist. Creating and loading data.")
-            Create_Collection()
-            create_payload_index()
-            LoadPDFsToVectorStore()
-            demo_res()
-    except Exception as e:
-        logging.error("Startup failed: %s", e)
-
-    # Uncomment for CLI usage
-    # query = input("Enter your question (or type 'exit' to quit): ").strip()
-    # while query.lower() != 'exit':
-    #     AnswerQes(query=query.strip())
-    #     query = input("Enter your question (or type 'exit' to quit): ").strip()
