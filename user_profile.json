@@ -1,11 +1,27 @@
 {
   "name": null,
-  "age": null,
-  "role": null,
+  "age": 21,
+  "role": "Student",
   "issues": [
-    "personal challenges"
+    "anxiety",
+    "stress",
+    "low motivation",
+    "motivation",
+    "goal-setting",
+    "routine",
+    "self-improvement",
+    "personal-challenges",
+    "social anxiety",
+    "goal setting",
+    "self improvement",
+    "sexual desire"
   ],
-  "feelings": [],
-  "notes": "User asks for help with personal challenges and wonders if a run is good right now.",
-  "last_updated": "2025-09-11T19:29:22.786343Z"
+  "feelings": [
+    "anxious",
+    "frustrated",
+    "hopeful",
+    "horny"
+  ],
+  "notes": "User seeks personalized advice for personal challenges, including goal achievement, social interactions with attractive girls, morning routine, self‑improvement, and coping with strong sexual feelings; also asks for song recommendations and quotes.",
+  "last_updated": "2025-09-12T00:20:42.902584Z"
 }

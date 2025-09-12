@@ -56,7 +56,7 @@ embeddings = NVIDIAEmbeddings(
 LLM = ChatGroq(
     model="openai/gpt-oss-120b",
     temperature=1,
-    max_completion_tokens=65536,
+    max_completion_tokens=5000,
     top_p=1,
     reasoning_effort="high",
     tools=[{"type": "browser_search"}],
@@ -422,7 +422,8 @@ indicates they need help, advice, or information in any of these areas:
     Well-being & Happiness
 
 Don't use for other topics, or for Real-time data (news, weather, stock prices, etc).
-    
+Don't use for casual conversation or chit-chat
+Don't use if the user query is very general or vague.
 Output is a text block of relevant excerpts, or 'NO_RESULTS' if nothing found. 
 Do NOT repeat this text verbatim in your final answer; instead, use it to inform your response naturally, 
 the books are about personal development and productivity, and life improvement.
@@ -438,10 +439,7 @@ def retrieve_docs(query: str) -> str:
 
 iptool_des ="""
     Tool: get_user_ip_location
-    Description: Detects the user's public IP address and returns a coarse geolocation
-    (country/region/city/lat/lon/timezone). Uses ipify + ipinfo/ipapi under the hood.
-    Input: Empty string (ignored).
-    Output: JSON string with fields: ip, city, region, country, latitude, longitude, timezone, org, asn, source.
+    Description: Use for: Local crisis resources, culturally appropriate framing, timezone‑aware suggestions, and weather‑appropriate activities; do not over‑collect or expose location details.
     """
 @tool(description=iptool_des)
 def get_user_ip_location(_: str = "") -> str:
@@ -562,18 +560,15 @@ def AnswerQes(query: str):
                     print("Unknown tool called: %s", tc["name"])
             except Exception:
                 pass
-
-        # Second pass with tool outputs included; ask model for final answer
         followup_messages = [*first_pass_messages, model_response, *tool_msgs]
-        
-        # Provide explicit instruction to use tool context
-        #followup_messages.append(SystemMessage(content="Use retrieved context judiciously. If NO_RESULTS, answer from general reasoning; otherwise ground answer."))
+        followup_messages.append(SystemMessage(content=prompts.Notes))
         final = LLM.invoke(followup_messages, temperature=TEMPERATURE_SUPPORT)
         final_answer_content = final.content if hasattr(final, "content") else str(final)
     
     else:
         # No tool call chosen -> treat model_response as final answer
         final_answer_content = model_response.content
+
 
     # Update history
     conversation_history.extend([
