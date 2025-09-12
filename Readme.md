@@ -37,6 +37,8 @@ cd zenith-ai
 npm run dev
 ```
 
+## LLM
+Uses **Open AI GPT OSS 120b**
 
 ## Project Structure
 
