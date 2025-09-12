@@ -1,6 +1,8 @@
 # Zoe - Mental Well-being AI Companion
 
-A Python-based AI chat application that provides mental well-being support through natural conversations and evidence-based techniques.
+## A Python-based AI chat application that provides mental well-being support through natural conversations and evidence-based techniques.
+
+![Zenith AI - Mental Well-being Companion](https://github.com/user-attachments/assets/0399a66e-ee84-402d-9920-04f1d35de890)
 
 ## Features
 
