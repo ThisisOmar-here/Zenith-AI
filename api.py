@@ -2,20 +2,22 @@
 from __future__ import annotations
 
 import os
+import json
 import logging
 from datetime import datetime
-from typing import List, Optional, Dict, Any
-from fastapi import FastAPI, HTTPException
+from typing import Any, Dict, List, Optional, Union
+from fastapi import FastAPI, HTTPException, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
 import Main  # noqa: E402
 import UserProfile as UserProfileModule  # noqa: E402
+import memory_import as MemoryImport  # noqa: E402
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(message)s")
 
-app = FastAPI(title="Zenith AI Knowledge API", version="1.1.1")
+app = FastAPI(title="Zenith AI Knowledge API", version="1.2.0")
 
 # Explicit profile file path (same directory as this api module)
 PROFILE_PATH = os.path.join(os.path.dirname(__file__), "user_profile.json")
@@ -59,6 +61,27 @@ class AssessmentPayload(BaseModel):
 
 class AssessmentResponse(BaseModel):
     status: str
+    profile: Dict[str, Any]
+
+class MemoryImportPayload(BaseModel):
+    """
+    JSON body for /import/memory.
+
+    `data` can be:
+      - A list/dict — parsed JSON from a ChatGPT / Claude / Gemini export file.
+      - A string    — plain-text pasted conversation.
+
+    `source_hint` is optional: 'chatgpt' | 'claude' | 'gemini' | 'text'.
+    When omitted the format is auto-detected.
+    """
+    data: Union[List, Dict, str]
+    source_hint: Optional[str] = None
+
+class MemoryImportResponse(BaseModel):
+    status: str
+    source_detected: str
+    messages_processed: int
+    fields_extracted: Dict[str, Any]
     profile: Dict[str, Any]
 
 @app.get("/health")
@@ -170,6 +193,174 @@ async def submit_assessment(payload: AssessmentPayload):
 @app.get("/user/profile")
 async def get_user_profile():
     return UserProfileModule.load_user_profile(PROFILE_PATH) or {}
+
+
+# ---------------------------------------------------------------------------
+# Memory import endpoints
+# ---------------------------------------------------------------------------
+
+@app.post("/import/memory", response_model=MemoryImportResponse)
+async def import_memory(payload: MemoryImportPayload):
+    """
+    Import conversation history from a ChatGPT, Claude, or Gemini export and
+    extract a rich psychological profile that is immediately merged into the
+    user's local profile so Zoe can personalise from the very first message.
+
+    Accepts:
+      • Parsed JSON  — pass the full contents of conversations.json (ChatGPT),
+                       the Claude export array, or the Gemini Takeout JSON as `data`.
+      • Plain text   — paste a copied conversation as a string in `data`.
+
+    The detected/provided `source_hint` is used only for labelling; format
+    detection is automatic.
+    """
+    try:
+        raw = payload.data
+
+        # If a source hint is 'text', force plain-text parsing
+        if payload.source_hint and payload.source_hint.lower() == "text":
+            if not isinstance(raw, str):
+                raw = json_safe_str(raw)
+            messages, platform = MemoryImport.parse_plain_text(raw), "Plain Text"
+        else:
+            messages, platform = MemoryImport.parse_import(raw)
+
+        if not messages:
+            raise HTTPException(
+                status_code=422,
+                detail="No messages could be parsed from the provided data. "
+                       "Please check the format or try pasting as plain text."
+            )
+
+        # Extract profile using the app's LLM instance
+        imported_profile = MemoryImport.extract_profile_from_import(
+            messages, Main.LLM, source_platform=platform
+        )
+
+        # Merge into existing profile on disk
+        merged = UserProfileModule.merge_imported_profile(imported_profile, PROFILE_PATH)
+
+        # Also refresh the in-memory profile used by the current session
+        Main.USERPROFILE = merged
+
+        # Build a summary of what was extracted (non-null / non-empty fields)
+        fields_extracted = {
+            k: v for k, v in imported_profile.items()
+            if v not in (None, "", [], {}) and k not in ("last_updated", "import_date")
+        }
+
+        logger.info(
+            "Memory import complete: platform=%s, messages=%d, fields=%d",
+            platform, len(messages), len(fields_extracted)
+        )
+
+        return MemoryImportResponse(
+            status="ok",
+            source_detected=platform,
+            messages_processed=len(messages),
+            fields_extracted=fields_extracted,
+            profile=merged,
+        )
+
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.exception("Memory import failed")
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@app.post("/import/memory/file", response_model=MemoryImportResponse)
+async def import_memory_file(file: UploadFile = File(...)):
+    """
+    Upload a ChatGPT / Claude / Gemini export file directly (JSON or plain text).
+
+    • For ChatGPT: upload conversations.json from the data export ZIP.
+    • For Claude:  upload the conversations JSON from the Anthropic export.
+    • For Gemini:  upload the JSON file from Google Takeout → Gemini Apps Activity.
+    • Plain text:  upload a .txt file containing a pasted conversation.
+    """
+    try:
+        raw_bytes = await file.read()
+        content_type = (file.content_type or "").lower()
+        filename = (file.filename or "").lower()
+
+        # Decide whether to treat as JSON or plain text
+        is_text = filename.endswith(".txt") or "text/plain" in content_type
+
+        if is_text:
+            raw: Any = raw_bytes.decode("utf-8", errors="replace")
+            messages, platform = MemoryImport.parse_plain_text(raw), "Plain Text"
+        else:
+            try:
+                raw = json.loads(raw_bytes.decode("utf-8", errors="replace"))
+            except json.JSONDecodeError as exc:
+                raise HTTPException(
+                    status_code=422,
+                    detail=f"Could not parse file as JSON: {exc}. "
+                           "If this is a plain-text conversation, rename the file to .txt."
+                )
+            messages, platform = MemoryImport.parse_import(raw)
+
+        if not messages:
+            raise HTTPException(
+                status_code=422,
+                detail="No messages found in the uploaded file. "
+                       "Make sure you are uploading the correct export file."
+            )
+
+        imported_profile = MemoryImport.extract_profile_from_import(
+            messages, Main.LLM, source_platform=platform
+        )
+        merged = UserProfileModule.merge_imported_profile(imported_profile, PROFILE_PATH)
+        Main.USERPROFILE = merged
+
+        fields_extracted = {
+            k: v for k, v in imported_profile.items()
+            if v not in (None, "", [], {}) and k not in ("last_updated", "import_date")
+        }
+
+        return MemoryImportResponse(
+            status="ok",
+            source_detected=platform,
+            messages_processed=len(messages),
+            fields_extracted=fields_extracted,
+            profile=merged,
+        )
+
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.exception("Memory file import failed")
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@app.get("/import/memory/status")
+async def import_memory_status():
+    """
+    Return whether a previous memory import has been applied, and a summary
+    of what was imported (platform, date, message count).
+    """
+    profile = UserProfileModule.load_user_profile(PROFILE_PATH) or {}
+    if profile.get("imported_from"):
+        return {
+            "imported": True,
+            "source": profile.get("imported_from"),
+            "import_date": profile.get("import_date"),
+            "messages_imported": profile.get("messages_imported"),
+            "issues_count": len(profile.get("issues") or []),
+            "feelings_count": len(profile.get("feelings") or []),
+            "triggers_count": len(profile.get("triggers") or []),
+        }
+    return {"imported": False}
+
+
+def json_safe_str(data: Any) -> str:
+    """Convert non-string data to a JSON string safely."""
+    try:
+        return json.dumps(data)
+    except Exception:
+        return str(data)
+
 
 if __name__ == "__main__":
     import uvicorn
