@@ -27,3 +27,14 @@ uvicorn[standard]==0.32.1
 # Networking / HTTP
 urllib3==2.2.3
 httpx==0.27.2
+
+# Voice layer
+groq>=0.9.0                  # Whisper STT (already used for LLM via langchain-groq)
+elevenlabs>=1.0.0             # Expressive TTS (Eleven v3)
+
+# Optional: Voice emotion detection (install separately if needed)
+# funasr>=1.1.0               # SenseVoice STT+emotion (open-source)
+# torch>=2.0.0                # Required by funasr
+
+# Langchain qdrant
+langchain-qdrant>=0.1.0

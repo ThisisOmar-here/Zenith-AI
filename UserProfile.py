@@ -1,7 +1,8 @@
 import json
 import re
 import logging
-from datetime import datetime
+import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 
@@ -23,7 +24,7 @@ def _extract_user_profile(conversation_history: List, llm) -> Dict[str, Any]:
             "issues": [],
             "feelings": [],
             "notes": "",
-            "last_updated": datetime.utcnow().isoformat() + "Z"
+            "last_updated": datetime.now(timezone.utc).isoformat() + "Z"
         }
 
     transcript = "\n---\n".join(human_msgs[-18:])  # limit scope
@@ -75,9 +76,10 @@ JSON:
         "issues": [i.strip().lower() for i in (data.get("issues") or []) if isinstance(i, str) and i.strip()][:8],
         "feelings": [f.strip().lower() for f in (data.get("feelings") or []) if isinstance(f, str) and f.strip()][:6],
         "notes": (data.get("notes") or "").strip()[:300],
-        "last_updated": datetime.utcnow().isoformat() + "Z"
+        "last_updated": datetime.now(timezone.utc).isoformat() + "Z"
     }
     return profile
+
 
 def _merge_profiles(old: Dict[str, Any], new: Dict[str, Any]) -> Dict[str, Any]:
     """
@@ -117,31 +119,138 @@ def _merge_profiles(old: Dict[str, Any], new: Dict[str, Any]) -> Dict[str, Any]:
     else:
         merged["notes"] = old_notes
 
-    merged["last_updated"] = new.get("last_updated") or datetime.utcnow().isoformat() + "Z"
+    # Preserve the chronicle — never overwrite it in profile merges
+    if "chronicle" in old:
+        merged["chronicle"] = old["chronicle"]
+
+    merged["last_updated"] = new.get("last_updated") or datetime.now(timezone.utc).isoformat() + "Z"
     return merged
+
+
+# -------- Chronicle Extractor -------- #
+
+class ChronicleExtractor:
+    """
+    Extracts specific life events, named people, and stated goals from conversation history.
+    Appends new entries to an existing chronicle (never replaces).
+    """
+
+    EXTRACT_PROMPT = """
+You are extracting specific, concrete facts from a conversation to build a life chronicle for a mental health companion.
+
+RULES:
+- Only extract what was EXPLICITLY stated. Never infer or fabricate.
+- Focus on: specific events with emotional weight, named people and their relationship to the user, stated goals with timelines.
+- Skip generic statements ("I feel anxious") — only capture specific situations ("Failed my exam on Friday, mom was angry").
+- Each entry must have a "summary" that is 1-2 sentences, factual, and specific.
+
+Return ONLY a JSON array. Each item must have:
+- type: "event" | "person" | "goal"
+- summary: string (1-2 sentences, specific and factual)
+
+For "event" type, also include if available:
+- people: array of first names or relationships mentioned
+- emotions: array of emotions expressed
+- linked_issues: array of issue labels
+- open: true (events are open until the user mentions resolution)
+
+For "person" type, also include:
+- name: string
+- relationship: string (e.g. "mom", "friend", "colleague named Sarah")
+- context: string (why this person is significant)
+
+For "goal" type, also include:
+- status: "active"
+- stated_on: ISO date string (today's date: {today})
+
+Conversation excerpt:
+<<<
+{transcript}
+>>>
+
+JSON array (empty array [] if nothing concrete found):
+"""
+
+    def extract(self, conversation_history: List, llm, existing_chronicle: List) -> List[Dict[str, Any]]:
+        """
+        Returns new chronicle entries to append (does not include existing ones).
+        Skips entries that are already captured (simple summary dedup).
+        """
+        human_msgs = [m.content for m in conversation_history if isinstance(m, HumanMessage)]
+        # Only look at recent messages to avoid redundant extraction
+        recent = human_msgs[-10:]
+        if not recent:
+            return []
+
+        transcript = "\n---\n".join(recent)
+        today = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+        prompt = self.EXTRACT_PROMPT.format(transcript=transcript, today=today)
+        try:
+            resp = llm.invoke([
+                SystemMessage(content="You output strictly a JSON array. No prose. No markdown code fences."),
+                HumanMessage(content=prompt)
+            ])
+            raw = resp.content if hasattr(resp, "content") else str(resp)
+        except Exception as exc:
+            logging.warning("ChronicleExtractor LLM call failed: %s", exc)
+            return []
+
+        # Strip markdown code fences if present
+        raw = re.sub(r"```(?:json)?", "", raw).strip()
+        m = re.search(r'\[.*\]', raw, re.DOTALL)
+        if m:
+            raw = m.group(0)
+
+        try:
+            entries = json.loads(raw)
+            if not isinstance(entries, list):
+                return []
+        except Exception:
+            logging.warning("ChronicleExtractor JSON parse failed. Raw: %s", raw[:300])
+            return []
+
+        # Build existing summary set for dedup
+        existing_summaries = {e.get("summary", "").lower()[:60] for e in existing_chronicle}
+
+        new_entries = []
+        for entry in entries:
+            if not isinstance(entry, dict) or not entry.get("summary"):
+                continue
+            summary_key = entry["summary"].lower()[:60]
+            if summary_key in existing_summaries:
+                continue
+
+            # Enrich with metadata
+            entry["id"] = "evt_" + uuid.uuid4().hex[:8]
+            entry.setdefault("open", True)
+
+            # Set follow_up_at to 7 days from now for events
+            if entry.get("type") == "event":
+                from datetime import timedelta
+                follow_up = datetime.now(timezone.utc) + timedelta(days=7)
+                entry.setdefault("follow_up_at", follow_up.strftime("%Y-%m-%dT%H:%M:%SZ"))
+
+            new_entries.append(entry)
+            existing_summaries.add(summary_key)
+
+        return new_entries
+
 
 # -------- Public API -------- #
 
 def update_user_profile(conversation_history: List,
                         llm,
+                        session=None,
                         profile_path: str = "user_profile.json",
                         min_turns: int = 2,
                         update_every: int = 2) -> Optional[Dict[str, Any]]:
     """
-    Periodically extracts and persists user profile JSON.
+    Periodically extracts and persists user profile.
+    If session is provided, updates session.user_profile and session.chronicle in place.
+    Otherwise falls back to file-based persistence (backward compat).
+
     Returns updated profile dict or None if not updated this call.
-
-    Parameters:
-        conversation_history: list of HumanMessage / AIMessage objects.
-        llm: an LLM with .invoke(messages) interface.
-        profile_path: output JSON file path.
-        min_turns: minimum human turns before first extraction.
-        update_every: run extraction every N human turns.
-
-    Usage example (after appending new messages):
-        from UserProfile import update_user_profile
-        update_user_profile(conversation_history, LLM)
-
     """
     human_turns = sum(1 for m in conversation_history if isinstance(m, HumanMessage))
     if human_turns < min_turns:
@@ -151,6 +260,24 @@ def update_user_profile(conversation_history: List,
 
     new_profile = _extract_user_profile(conversation_history, llm)
 
+    if session is not None:
+        # Session-aware path
+        old_profile = session.user_profile or {}
+        merged = _merge_profiles(old_profile, new_profile)
+        session.user_profile = merged
+
+        # Extract chronicle entries
+        extractor = ChronicleExtractor()
+        new_entries = extractor.extract(conversation_history, llm, session.chronicle)
+        if new_entries:
+            # Cap chronicle at 50 entries
+            session.chronicle = (session.chronicle + new_entries)[-50:]
+            logging.info("Chronicle updated: +%d entries (total %d)", len(new_entries), len(session.chronicle))
+
+        logging.info("User profile updated in session %s", session.session_id)
+        return merged
+
+    # File-based fallback
     path = Path(profile_path)
     if path.exists():
         try:
@@ -165,29 +292,22 @@ def update_user_profile(conversation_history: List,
     logging.info("User profile updated: %s", path.resolve())
     return merged
 
+
 def load_user_profile(profile_path: str = "user_profile.json") -> Optional[Dict[str, Any]]:
-    """
-    Load user profile from JSON file.
-    Returns profile dict or None if file doesn't exist or can't be parsed.
-    """
     path = Path(profile_path)
     if not path.exists():
         return None
-    
     try:
         return json.loads(path.read_text(encoding="utf-8"))
     except Exception as e:
         logging.warning(f"Failed to load user profile: {e}")
         return None
 
+
 def save_user_profile(profile_data: Dict[str, Any], profile_path: str = "user_profile.json") -> bool:
-    """
-    Save user profile to JSON file.
-    Returns True if successful, False otherwise.
-    """
     try:
         path = Path(profile_path)
-        profile_data["last_updated"] = datetime.utcnow().isoformat() + "Z"
+        profile_data["last_updated"] = datetime.now(timezone.utc).isoformat() + "Z"
         path.write_text(json.dumps(profile_data, indent=2, ensure_ascii=False), encoding="utf-8")
         logging.info("User profile saved: %s", path.resolve())
         return True
