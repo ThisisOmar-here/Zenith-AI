@@ -1,3 +1,5 @@
+<p align="center"><img src="docs/icon.svg" alt="Zenith icon" width="88"></p>
+
 <h1 align="center">Zenith</h1>
 
 <p align="center">
