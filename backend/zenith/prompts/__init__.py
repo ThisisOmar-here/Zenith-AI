@@ -1,0 +1,12 @@
+"""Prompt templates, kept as Markdown files so they can be reviewed and diffed."""
+
+from functools import cache
+from pathlib import Path
+
+_DIR = Path(__file__).parent
+
+
+@cache
+def load(name: str) -> str:
+    """Return the text of ``prompts/<name>.md``."""
+    return (_DIR / f"{name}.md").read_text(encoding="utf-8").strip()
