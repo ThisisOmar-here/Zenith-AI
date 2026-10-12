@@ -1,0 +1,170 @@
+{
+  "expressions": {
+    "happy": {
+      "face": "😊",
+      "eyes": "^_^",
+      "mouth": "◡",
+      "color": "#FFD700",
+      "animation": "bounce",
+      "description": "Cheerful and optimistic"
+    },
+    "excited": {
+      "face": "🤩",
+      "eyes": "✨_✨",
+      "mouth": "○",
+      "color": "#FF6B6B",
+      "animation": "wiggle",
+      "description": "Enthusiastic and energetic"
+    },
+    "thinking": {
+      "face": "🤔",
+      "eyes": "◔_◔",
+      "mouth": "~",
+      "color": "#4ECDC4",
+      "animation": "pulse",
+      "description": "Contemplative and focused"
+    },
+    "confused": {
+      "face": "😕",
+      "eyes": "@_@",
+      "mouth": "?",
+      "color": "#95A5A6",
+      "animation": "shake",
+      "description": "Puzzled and uncertain"
+    },
+    "sad": {
+      "face": "😢",
+      "eyes": "T_T",
+      "mouth": "︵",
+      "color": "#3498DB",
+      "animation": "droop",
+      "description": "Melancholy and sympathetic"
+    },
+    "surprised": {
+      "face": "😲",
+      "eyes": "O_O",
+      "mouth": "○",
+      "color": "#E74C3C",
+      "animation": "jump",
+      "description": "Amazed and startled"
+    },
+    "sleepy": {
+      "face": "😴",
+      "eyes": "-_-",
+      "mouth": "zzz",
+      "color": "#9B59B6",
+      "animation": "sway",
+      "description": "Drowsy and relaxed"
+    },
+    "love": {
+      "face": "😍",
+      "eyes": "♥_♥",
+      "mouth": "♡",
+      "color": "#E91E63",
+      "animation": "float",
+      "description": "Affectionate and caring"
+    },
+    "cool": {
+      "face": "😎",
+      "eyes": "B-)",
+      "mouth": "—",
+      "color": "#2C3E50",
+      "animation": "slide",
+      "description": "Confident and laid-back"
+    },
+    "angry": {
+      "face": "😠",
+      "eyes": ">_<",
+      "mouth": "︿",
+      "color": "#E74C3C",
+      "animation": "shake",
+      "description": "Frustrated and intense"
+    },
+    "wink": {
+      "face": "😉",
+      "eyes": "^_~",
+      "mouth": "◡",
+      "color": "#F39C12",
+      "animation": "tilt",
+      "description": "Playful and mischievous"
+    },
+    "neutral": {
+      "face": "🤖",
+      "eyes": "●_●",
+      "mouth": "—",
+      "color": "#7F8C8D",
+      "animation": "none",
+      "description": "Calm and balanced"
+    }
+  },
+  "contexts": {
+    "greeting": ["happy", "excited", "wink"],
+    "helping": ["thinking", "cool", "neutral"],
+    "error": ["confused", "sad", "surprised"],
+    "success": ["happy", "excited", "love"],
+    "waiting": ["sleepy", "thinking", "neutral"],
+    "goodbye": ["sad", "love", "wink"]
+  },
+  "animations": {
+    "bounce": {
+      "keyframes": "0% { transform: translateY(0px); } 50% { transform: translateY(-10px); } 100% { transform: translateY(0px); }",
+      "duration": "0.6s",
+      "timing": "ease-in-out",
+      "iteration": "infinite"
+    },
+    "wiggle": {
+      "keyframes": "0% { transform: rotate(0deg); } 25% { transform: rotate(5deg); } 75% { transform: rotate(-5deg); } 100% { transform: rotate(0deg); }",
+      "duration": "0.5s",
+      "timing": "ease-in-out",
+      "iteration": "infinite"
+    },
+    "pulse": {
+      "keyframes": "0% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.05); opacity: 0.8; } 100% { transform: scale(1); opacity: 1; }",
+      "duration": "2s",
+      "timing": "ease-in-out",
+      "iteration": "infinite"
+    },
+    "shake": {
+      "keyframes": "0% { transform: translateX(0px); } 25% { transform: translateX(-5px); } 75% { transform: translateX(5px); } 100% { transform: translateX(0px); }",
+      "duration": "0.4s",
+      "timing": "ease-in-out",
+      "iteration": "3"
+    },
+    "droop": {
+      "keyframes": "0% { transform: translateY(0px) rotate(0deg); } 100% { transform: translateY(5px) rotate(-2deg); }",
+      "duration": "1s",
+      "timing": "ease-out",
+      "iteration": "1"
+    },
+    "jump": {
+      "keyframes": "0% { transform: translateY(0px) scale(1); } 50% { transform: translateY(-15px) scale(1.1); } 100% { transform: translateY(0px) scale(1); }",
+      "duration": "0.4s",
+      "timing": "ease-out",
+      "iteration": "1"
+    },
+    "sway": {
+      "keyframes": "0% { transform: rotate(0deg); } 50% { transform: rotate(3deg); } 100% { transform: rotate(-3deg); }",
+      "duration": "3s",
+      "timing": "ease-in-out",
+      "iteration": "infinite"
+    },
+    "float": {
+      "keyframes": "0% { transform: translateY(0px); } 50% { transform: translateY(-8px); } 100% { transform: translateY(0px); }",
+      "duration": "2s",
+      "timing": "ease-in-out",
+      "iteration": "infinite"
+    },
+    "slide": {
+      "keyframes": "0% { transform: translateX(-10px); } 100% { transform: translateX(0px); }",
+      "duration": "0.5s",
+      "timing": "ease-out",
+      "iteration": "1"
+    },
+    "tilt": {
+      "keyframes": "0% { transform: rotate(0deg); } 50% { transform: rotate(-10deg); } 100% { transform: rotate(0deg); }",
+      "duration": "0.6s",
+      "timing": "ease-in-out",
+      "iteration": "1"
+    }
+  }
+}
